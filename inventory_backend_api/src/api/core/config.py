@@ -9,7 +9,9 @@ class Settings(BaseSettings):
 
     Notes:
     - Do not hardcode secrets. Configure using environment variables.
-    - The DB container provides MONGODB_URL and MONGODB_DB.
+    - For DB connectivity, the DB container provides `MONGODB_URL` and `MONGODB_DB`.
+    - For browser-based local development, set `ALLOWED_ORIGINS` to the frontend origin
+      (e.g. `http://localhost:3000`).
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -18,6 +20,8 @@ class Settings(BaseSettings):
     node_env: str = Field(default="development", alias="NODE_ENV")
 
     # Network / CORS
+    # Use comma-separated values (e.g. "http://localhost:3000,https://example.com").
+    # Use "*" only when you do NOT need cookies/Authorization with credentials.
     allowed_origins: str = Field(default="*", alias="ALLOWED_ORIGINS")
     allowed_methods: str = Field(default="*", alias="ALLOWED_METHODS")
     allowed_headers: str = Field(default="*", alias="ALLOWED_HEADERS")

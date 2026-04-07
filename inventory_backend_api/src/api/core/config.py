@@ -31,9 +31,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     access_token_exp_minutes: int = Field(default=60, alias="ACCESS_TOKEN_EXP_MINUTES")
 
-    # DB (Mongo)
-    mongodb_url: str = Field(default="", alias="MONGODB_URL")
-    mongodb_db: str = Field(default="", alias="MONGODB_DB")
+    # DB (PostgreSQL)
+    postgres_host: str = Field(default="", alias="POSTGRES_HOST")
+    postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
+    postgres_db: str = Field(default="", alias="POSTGRES_DB")
+    postgres_user: str = Field(default="", alias="POSTGRES_USER")
+    postgres_password: str = Field(default="", alias="POSTGRES_PASSWORD")
 
     # App URLs (useful for docs / integration)
     backend_url: str = Field(default="", alias="BACKEND_URL")

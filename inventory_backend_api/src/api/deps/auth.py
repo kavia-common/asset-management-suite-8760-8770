@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from src.api.core.serialization import to_object_id
+from src.api.core.serialization import to_uuid
 from src.api.core.security import decode_token
 from src.api.models.schemas import RoleName, UserStatus
 from src.api.repositories.users import UsersRepository
@@ -28,11 +28,11 @@ async def get_current_user(
         user_id = claims.get("sub")
         if not user_id:
             raise ValueError("missing sub")
-        oid = to_object_id(user_id)
+        uid = to_uuid(user_id)
     except Exception:  # noqa: BLE001
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    user = await users_repo.get_by_id(oid)
+    user = await users_repo.get_by_id(uid)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if user.get("status") == UserStatus.disabled.value:

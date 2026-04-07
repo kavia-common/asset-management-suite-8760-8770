@@ -6,11 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.core.config import get_settings
-from src.api.core.db import close_mongo, connect_to_mongo
-from src.api.repositories.allocations import AllocationsRepository
-from src.api.repositories.assets import AssetsRepository
-from src.api.repositories.audits import AuditsRepository
-from src.api.repositories.users import UsersRepository
+from src.api.core.db import close_postgres, connect_to_postgres
+from src.api.core.migrations import run_migrations
+from src.api.core.seed import ensure_seed_admin
 from src.api.routers.allocations import router as allocations_router
 from src.api.routers.assets import router as assets_router
 from src.api.routers.audits import router as audits_router
@@ -30,21 +28,23 @@ openapi_tags = [
 async def lifespan(app: FastAPI):
     """App lifespan.
 
-    - Connects to MongoDB (Motor)
-    - Ensures indexes
+    - Connects to PostgreSQL (async SQLAlchemy)
+    - Runs migrations (create/update schema)
+    - Ensures a bootstrap admin user exists (idempotent seed)
     """
-    mongo = await connect_to_mongo()
-    app.state.mongo = mongo
+    pg = await connect_to_postgres()
+    app.state.postgres = pg
 
-    # Ensure indexes
-    await UsersRepository(mongo.db).ensure_indexes()
-    await AssetsRepository(mongo.db).ensure_indexes()
-    await AllocationsRepository(mongo.db).ensure_indexes()
-    await AuditsRepository(mongo.db).ensure_indexes()
+    # Apply schema
+    await run_migrations(pg.engine)
+
+    # Ensure an initial admin exists for first login (optional env overrides).
+    async with pg.sessionmaker() as session:
+        await ensure_seed_admin(session)
 
     yield
 
-    await close_mongo(mongo)
+    await close_postgres(pg)
 
 
 settings = get_settings()
@@ -68,8 +68,16 @@ allow_origins = (
     if settings.allowed_origins != "*"
     else ["*"]
 )
-allow_methods = [m.strip() for m in (settings.allowed_methods or "*").split(",")] if settings.allowed_methods != "*" else ["*"]
-allow_headers = [h.strip() for h in (settings.allowed_headers or "*").split(",")] if settings.allowed_headers != "*" else ["*"]
+allow_methods = (
+    [m.strip() for m in (settings.allowed_methods or "*").split(",")]
+    if settings.allowed_methods != "*"
+    else ["*"]
+)
+allow_headers = (
+    [h.strip() for h in (settings.allowed_headers or "*").split(",")]
+    if settings.allowed_headers != "*"
+    else ["*"]
+)
 
 allow_credentials = allow_origins != ["*"]
 

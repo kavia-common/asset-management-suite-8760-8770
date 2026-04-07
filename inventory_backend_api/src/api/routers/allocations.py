@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.core.serialization import mongo_to_api, to_object_id
+from src.api.core.serialization import to_uuid
 from src.api.deps.auth import get_current_user, require_roles
 from src.api.models.schemas import (
     AllocateRequest,
@@ -38,12 +38,12 @@ async def list_allocations(
     """List allocations."""
     # If not admin, force user_id to self
     if "admin" not in actor.get("roles", []):
-        uid = actor["_id"]
+        uid = to_uuid(actor["id"])
     else:
-        uid = to_object_id(user_id) if user_id else None
+        uid = to_uuid(user_id) if user_id else None
 
     docs = await alloc_repo.list(user_id=uid, limit=limit, offset=offset)
-    return [AllocationResponse(**mongo_to_api(d)) for d in docs]
+    return [AllocationResponse(**_alloc_api(d)) for d in docs]
 
 
 @router.post(
@@ -63,34 +63,35 @@ async def allocate(
     actor: dict = Depends(require_roles(RoleName.admin)),
 ) -> AllocationResponse:
     """Allocate an asset to a user."""
-    asset_oid = to_object_id(payload.asset_id)
-    user_oid = to_object_id(payload.to_user_id)
+    asset_uid = to_uuid(payload.asset_id)
+    user_uid = to_uuid(payload.to_user_id)
 
-    asset = await assets_repo.get_by_id(asset_oid)
+    asset = await assets_repo.get_by_id(asset_uid)
     if not asset or not asset.get("active", True):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    user = await users_repo.get_by_id(user_oid)
+
+    user = await users_repo.get_by_id(user_uid)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    active = await alloc_repo.get_active_by_asset(asset_oid)
+    active = await alloc_repo.get_active_by_asset(asset_uid)
     if active:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Asset already allocated")
 
     doc = await alloc_repo.create_allocation(
-        asset_id=asset_oid,
-        to_user_id=user_oid,
+        asset_id=asset_uid,
+        to_user_id=user_uid,
         notes=payload.notes,
-        actor_user_id=actor["_id"],
+        actor_user_id=to_uuid(actor["id"]),
     )
     await audits_repo.create(
-        actor_user_id=actor["_id"],
+        actor_user_id=to_uuid(actor["id"]),
         action=AuditAction.allocate.value,
         entity_type="allocation",
-        entity_id=doc["_id"],
-        detail={"allocation": mongo_to_api(doc)},
+        entity_id=to_uuid(doc["id"]),
+        detail={"allocation": _alloc_api(doc)},
     )
-    return AllocationResponse(**mongo_to_api(doc))
+    return AllocationResponse(**_alloc_api(doc))
 
 
 @router.post(
@@ -107,19 +108,19 @@ async def return_asset(
     actor: dict = Depends(require_roles(RoleName.admin)),
 ) -> AllocationResponse:
     """Return an asset."""
-    alloc_oid = to_object_id(payload.allocation_id)
-    doc = await alloc_repo.mark_returned(alloc_oid, payload.notes)
+    alloc_uid = to_uuid(payload.allocation_id)
+    doc = await alloc_repo.mark_returned(alloc_uid, payload.notes)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allocation not found or not active")
 
     await audits_repo.create(
-        actor_user_id=actor["_id"],
+        actor_user_id=to_uuid(actor["id"]),
         action=AuditAction.return_asset.value,
         entity_type="allocation",
-        entity_id=alloc_oid,
-        detail={"allocation": mongo_to_api(doc)},
+        entity_id=alloc_uid,
+        detail={"allocation": _alloc_api(doc)},
     )
-    return AllocationResponse(**mongo_to_api(doc))
+    return AllocationResponse(**_alloc_api(doc))
 
 
 @router.post(
@@ -137,27 +138,30 @@ async def request_transfer(
     actor: dict = Depends(get_current_user),
 ) -> AllocationResponse:
     """Request a transfer."""
-    alloc_oid = to_object_id(payload.allocation_id)
-    to_user_oid = to_object_id(payload.to_user_id)
+    alloc_uid = to_uuid(payload.allocation_id)
+    to_user_uid = to_uuid(payload.to_user_id)
 
-    to_user = await users_repo.get_by_id(to_user_oid)
+    to_user = await users_repo.get_by_id(to_user_uid)
     if not to_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found")
 
     doc = await alloc_repo.create_transfer_request(
-        allocation_id=alloc_oid, to_user_id=to_user_oid, notes=payload.notes, requested_by=actor["_id"]
+        allocation_id=alloc_uid,
+        to_user_id=to_user_uid,
+        notes=payload.notes,
+        requested_by=to_uuid(actor["id"]),
     )
     if not doc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Allocation not active or not found")
 
     await audits_repo.create(
-        actor_user_id=actor["_id"],
+        actor_user_id=to_uuid(actor["id"]),
         action=AuditAction.transfer_request.value,
         entity_type="allocation",
-        entity_id=alloc_oid,
-        detail={"allocation": mongo_to_api(doc)},
+        entity_id=alloc_uid,
+        detail={"allocation": _alloc_api(doc)},
     )
-    return AllocationResponse(**mongo_to_api(doc))
+    return AllocationResponse(**_alloc_api(doc))
 
 
 @router.post(
@@ -175,17 +179,26 @@ async def decide_transfer(
     actor: dict = Depends(require_roles(RoleName.admin)),
 ) -> AllocationResponse:
     """Approve or reject a transfer request."""
-    alloc_oid = to_object_id(allocation_id)
-    doc = await alloc_repo.decide_transfer(alloc_oid, payload.decision, actor["_id"], payload.notes)
+    alloc_uid = to_uuid(allocation_id)
+    doc = await alloc_repo.decide_transfer(alloc_uid, payload.decision, to_uuid(actor["id"]), payload.notes)
     if not doc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Transfer not pending or allocation not found")
 
     action = AuditAction.transfer_approve.value if payload.decision == "approve" else AuditAction.transfer_reject.value
     await audits_repo.create(
-        actor_user_id=actor["_id"],
+        actor_user_id=to_uuid(actor["id"]),
         action=action,
         entity_type="allocation",
-        entity_id=alloc_oid,
-        detail={"result": mongo_to_api(doc)},
+        entity_id=alloc_uid,
+        detail={"result": _alloc_api(doc)},
     )
-    return AllocationResponse(**mongo_to_api(doc))
+    return AllocationResponse(**_alloc_api(doc))
+
+
+def _alloc_api(doc: dict) -> dict:
+    """Convert internal dict to API-ready structure (already JSON-friendly)."""
+    return {
+        **doc,
+        "created_at": doc["created_at"].isoformat(),
+        "updated_at": doc["updated_at"].isoformat(),
+    }

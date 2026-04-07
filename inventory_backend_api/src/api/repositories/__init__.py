@@ -1,1 +1,1 @@
-"""MongoDB repositories."""
+"""Database repositories (PostgreSQL)."""

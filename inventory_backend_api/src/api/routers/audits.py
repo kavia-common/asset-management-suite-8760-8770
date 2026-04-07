@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from src.api.core.serialization import mongo_to_api
 from src.api.deps.auth import require_roles
 from src.api.models.schemas import AuditLogResponse, RoleName
 from src.api.repositories.audits import AuditsRepository
@@ -25,4 +24,12 @@ async def list_audits(
 ) -> list[AuditLogResponse]:
     """List audits."""
     docs = await audits_repo.list(limit=limit, offset=offset)
-    return [AuditLogResponse(**mongo_to_api(d)) for d in docs]
+    return [
+        AuditLogResponse(
+            **{
+                **d,
+                "created_at": d["created_at"].isoformat(),
+            }
+        )
+        for d in docs
+    ]

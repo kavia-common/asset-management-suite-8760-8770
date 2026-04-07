@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.core.serialization import mongo_to_api, to_object_id
+from src.api.core.serialization import to_uuid
 from src.api.deps.auth import get_current_user, require_roles
 from src.api.models.schemas import AssetCreateRequest, AssetResponse, AssetUpdateRequest, RoleName
 from src.api.repositories.assets import AssetsRepository
@@ -27,7 +27,7 @@ async def list_assets(
 ) -> list[AssetResponse]:
     """List assets."""
     docs = await assets_repo.list(q=q, limit=limit, offset=offset)
-    return [AssetResponse(**mongo_to_api(d)) for d in docs]
+    return [AssetResponse(**_asset_api(d)) for d in docs]
 
 
 @router.post(
@@ -51,9 +51,13 @@ async def create_asset(
 
     doc = await assets_repo.create(payload.model_dump())
     await audits_repo.create(
-        actor_user_id=actor["_id"], action="create", entity_type="asset", entity_id=to_object_id(mongo_to_api(doc)["id"]), detail={}
+        actor_user_id=to_uuid(actor["id"]),
+        action="create",
+        entity_type="asset",
+        entity_id=to_uuid(doc["id"]),
+        detail={},
     )
-    return AssetResponse(**mongo_to_api(doc))
+    return AssetResponse(**_asset_api(doc))
 
 
 @router.patch(
@@ -71,11 +75,25 @@ async def update_asset(
     actor: dict = Depends(require_roles(RoleName.admin)),
 ) -> AssetResponse:
     """Update asset."""
-    oid = to_object_id(asset_id)
+    uid = to_uuid(asset_id)
     updates = payload.model_dump(exclude_unset=True)
-    doc = await assets_repo.update(oid, updates)
+    doc = await assets_repo.update(uid, updates)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
-    await audits_repo.create(actor_user_id=actor["_id"], action="update", entity_type="asset", entity_id=oid, detail={"updates": updates})
-    return AssetResponse(**mongo_to_api(doc))
+    await audits_repo.create(
+        actor_user_id=to_uuid(actor["id"]),
+        action="update",
+        entity_type="asset",
+        entity_id=uid,
+        detail={"updates": updates},
+    )
+    return AssetResponse(**_asset_api(doc))
+
+
+def _asset_api(doc: dict) -> dict:
+    return {
+        **doc,
+        "created_at": doc["created_at"].isoformat(),
+        "updated_at": doc["updated_at"].isoformat(),
+    }

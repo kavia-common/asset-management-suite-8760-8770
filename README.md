@@ -4,20 +4,23 @@ This workspace contains the **FastAPI backend** container: `inventory_backend_ap
 
 The full system also includes:
 - `inventory_react_frontend` (React, port `3000`) in workspace `asset-management-suite-8760-8771`
-- `inventory_postgresql_db` (**MongoDB** despite its name, port `5001`) in workspace `asset-management-suite-8760-8769`
+- `inventory_postgresql_db` (**PostgreSQL**, port `5001`) in workspace `asset-management-suite-8760-8769`
 
 ## Ports / URLs (local dev defaults)
 
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:3001`
-- MongoDB: provided via env var `MONGODB_URL` (DB container exposes it)
+- PostgreSQL: provided via env vars `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` (DB container exposes them)
 
 ## Backend environment variables
 
 Create a `.env` file in `inventory_backend_api/` (do not commit secrets). Required:
 
-- `MONGODB_URL` (from DB container)
-- `MONGODB_DB` (from DB container)
+- `POSTGRES_HOST` (from DB container)
+- `POSTGRES_PORT` (from DB container)
+- `POSTGRES_DB` (from DB container)
+- `POSTGRES_USER` (from DB container)
+- `POSTGRES_PASSWORD` (from DB container)
 - `JWT_SECRET` (set to a strong random string)
 - `ALLOWED_ORIGINS` (recommended for local dev: `http://localhost:3000`)
 
@@ -51,13 +54,16 @@ From `asset-management-suite-8760-8770/inventory_backend_api`:
 
 ## End-to-end local run (frontend + backend + DB)
 
-1. Start DB container (`inventory_postgresql_db`, actually MongoDB)
+1. Start DB container (`inventory_postgresql_db`, PostgreSQL)
    - Ensure it is running and note exported env vars:
-     - `MONGODB_URL`
-     - `MONGODB_DB`
+     - `POSTGRES_HOST`
+     - `POSTGRES_PORT`
+     - `POSTGRES_DB`
+     - `POSTGRES_USER`
+     - `POSTGRES_PASSWORD`
 
 2. Start backend (`inventory_backend_api`)
-   - Set `.env` with `MONGODB_URL`, `MONGODB_DB`, `JWT_SECRET`, `ALLOWED_ORIGINS=http://localhost:3000`
+   - Set `.env` with `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `ALLOWED_ORIGINS=http://localhost:3000`
    - Start on port `3001`
 
 3. Start frontend (`inventory_react_frontend`)
